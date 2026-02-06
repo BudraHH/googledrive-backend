@@ -41,7 +41,13 @@ const sendEmail = async (options) => {
         }
         console.log('-----------------------------------------');
 
-        const info = await transporter.sendMail(mailOptions);
+        // IMPLEMENT TIMEOUT: Race against a 3-second timer
+        const sendPromise = transporter.sendMail(mailOptions);
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Email timeout (3s limit reached)')), 3000)
+        );
+
+        const info = await Promise.race([sendPromise, timeoutPromise]);
 
         return info;
     } catch (error) {

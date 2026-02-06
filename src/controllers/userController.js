@@ -36,7 +36,9 @@ export const registerUser = asyncHandler(async (req, res) => {
     await user.save();
 
     // Create activation URL
-    const activationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${activationToken}`;
+    // Create activation URL (Handle trailing slash safely)
+    const frontend = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:5173';
+    const activationUrl = `${frontend}/verify-email?token=${activationToken}`;
 
     const message = `Welcome to CloudDrive! \n\n Please activate your account by clicking the link below: \n\n ${activationUrl}`;
 
