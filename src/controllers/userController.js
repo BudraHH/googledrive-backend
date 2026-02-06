@@ -40,25 +40,64 @@ export const registerUser = asyncHandler(async (req, res) => {
 
     const message = `Welcome to CloudDrive! \n\n Please activate your account by clicking the link below: \n\n ${activationUrl}`;
 
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            .container { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333; }
+            .header { text-align: center; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+            .logo { font-size: 24px; font-weight: bold; color: #2563eb; text-decoration: none; }
+            .content { padding: 30px 0; line-height: 1.6; }
+            .btn { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 20px; }
+            .footer { font-size: 12px; color: #666; text-align: center; padding-top: 20px; border-top: 1px solid #eee; }
+            .link { word-break: break-all; color: #2563eb; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <a href="#" class="logo">CloudDrive</a>
+            </div>
+            <div class="content">
+                <h2>Welcome to CloudDrive, ${user.firstName}!</h2>
+                <p>Thank you for signing up. To complete your registration and start securing your files, please activate your account by clicking the button below:</p>
+                <div style="text-align: center;">
+                    <a href="${activationUrl}" class="btn">Activate Account</a>
+                </div>
+                <p style="margin-top: 30px;">If the button doesn't work, you can copy and paste the following link into your browser:</p>
+                <p class="link">${activationUrl}</p>
+                <p>This link will expire in 24 hours.</p>
+            </div>
+            <div class="footer">
+                <p>If you didn't create an account with CloudDrive, you can safely ignore this email.</p>
+                <p>&copy; ${new Date().getFullYear()} CloudDrive Inc. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
     try {
         await sendEmail({
             email: user.email,
-            subject: 'Account Activation',
+            subject: 'Activate Your CloudDrive Account',
             message,
-            html: `<h1>Welcome to CloudDrive</h1><p>Please click the link below to activate your account:</p><a href="${activationUrl}">${activationUrl}</a>`
+            html
         });
 
         res.status(201).json({
             message: 'Registration successful. Please check your email to activate your account.'
         });
     } catch (error) {
-        console.error('Registration/Email Error DETAILS:', error);
-        user.activationToken = undefined;
-        user.activationTokenExpire = undefined;
-        await user.save();
+        if (error.message !== 'Email delivery skipped (Offline Mode)') {
+            console.error('Email sending failed:', error.message);
+        }
 
-        res.status(500);
-        throw new Error(`Email could not be sent: ${error.message || 'Unknown error'}`);
+        // We do NOT clear tokens here anymore, so the link in the console remains valid
+        res.status(201).json({
+            message: `Registration successful. [Note: Email service is offline. Use this link to verify: ${activationUrl}]`
+        });
     }
 
 });
@@ -141,22 +180,61 @@ export const forgotPassword = asyncHandler(async (req, res) => {
 
     const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please click the link below: \n\n ${resetUrl}`;
 
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            .container { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333; }
+            .header { text-align: center; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+            .logo { font-size: 24px; font-weight: bold; color: #2563eb; text-decoration: none; }
+            .content { padding: 30px 0; line-height: 1.6; }
+            .btn { display: inline-block; padding: 12px 24px; background-color: #ef4444; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 20px; }
+            .footer { font-size: 12px; color: #666; text-align: center; padding-top: 20px; border-top: 1px solid #eee; }
+            .link { word-break: break-all; color: #2563eb; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <a href="#" class="logo">CloudDrive</a>
+            </div>
+            <div class="content">
+                <h2>Password Reset Request</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>We received a request to reset your password for your CloudDrive account. Click the button below to choose a new password:</p>
+                <div style="text-align: center;">
+                    <a href="${resetUrl}" class="btn">Reset Password</a>
+                </div>
+                <p style="margin-top: 30px;">If you didn't request a password reset, please ignore this email. Your current password will remain safe.</p>
+                <p>For security reasons, this link will expire in 1 hour.</p>
+                <p class="link">${resetUrl}</p>
+            </div>
+            <div class="footer">
+                <p>CloudDrive Security Team</p>
+                <p>&copy; ${new Date().getFullYear()} CloudDrive Inc. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
     try {
         await sendEmail({
             email: user.email,
-            subject: 'Password Reset Token',
+            subject: 'Reset Your CloudDrive Password',
             message,
-            html: `<h1>Password Reset</h1><p>Please click the link below to reset your password:</p><a href="${resetUrl}">${resetUrl}</a>`
+            html
         });
 
         res.status(200).json({ message: 'Email sent' });
     } catch (error) {
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpire = undefined;
-        await user.save();
+        console.error('Password reset email failed, but continuing for hackathon safety:', error.message);
 
-        res.status(500);
-        throw new Error('Email could not be sent');
+        // Preserve tokens so the link in console works
+        res.status(200).json({
+            message: `Reset request received. [Note: Email service is offline. Use this link: ${resetUrl}]`
+        });
     }
 });
 
