@@ -20,6 +20,9 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Render/Vercel deployment (required for rate limiting behind reverse proxy)
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
 const limiter = rateLimit({

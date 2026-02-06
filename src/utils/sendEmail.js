@@ -1,87 +1,62 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const sendEmail = async (options) => {
-    // Validate SMTP credentials are configured
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        console.log('❌ SMTP CREDENTIALS MISSING!');
-        console.log('   SMTP_USER:', process.env.SMTP_USER ? '✅ Set' : '❌ NOT SET');
-        console.log('   SMTP_PASS:', process.env.SMTP_PASS ? '✅ Set (hidden)' : '❌ NOT SET');
-        throw new Error('Email service not configured - SMTP credentials missing');
+    // HACKATHON SAFETY: Always log the link to terminal in case of delivery issues
+    console.log('-----------------------------------------');
+    console.log('📧 EMAIL SENDING TO:', options.email);
+    console.log('🔗 SUBJECT:', options.subject);
+    if (options.html) {
+        // Find the first href that actually looks like a URL (not just "#")
+        const links = options.html.match(/href="([^"|#][^"]+)"/g);
+        if (links && links.length > 0) {
+            const activationLink = links[0].match(/"([^"]+)"/)[1];
+            console.log('📍 ACTION LINK (COPY THIS):');
+            console.log('\x1b[36m%s\x1b[0m', activationLink); // Cyan color
+        }
+    }
+    console.log('-----------------------------------------');
+
+    // Check if Resend API key is configured
+    if (!process.env.RESEND_API_KEY) {
+        console.log('⚠️  RESEND_API_KEY not configured - running in offline mode');
+        console.log('📋 To enable emails, add RESEND_API_KEY to your environment variables');
+        console.log('🔗 Get your free API key at: https://resend.com');
+        // Don't throw error - allow registration to continue, link is logged above
+        return { id: 'offline-mode', message: 'Email skipped - API key not configured' };
     }
 
-    console.log('📤 Attempting to send email via Gmail SMTP...');
-    console.log('   Using SMTP_USER:', process.env.SMTP_USER);
+    console.log('📤 Sending email via Resend API...');
 
-    // 1. Create a transporter for Gmail SMTP
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-            user: process.env.SMTP_USER, // Your Gmail address
-            pass: process.env.SMTP_PASS, // Your Gmail App Password
-        },
-    });
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
     try {
-        const mailOptions = {
-            // Gmail automatically overrides the 'from' address to the authenticated user, 
-            // but we can set a display name.
-            from: `"CloudDrive" <${process.env.SMTP_USER}>`,
+        const { data, error } = await resend.emails.send({
+            from: process.env.FROM_EMAIL || 'CloudDrive <onboarding@resend.dev>',
             to: options.email,
             subject: options.subject,
             html: options.html || `<p>${options.message}</p>`,
-        };
+        });
 
-        // HACKATHON SAFETY: Always log the link to terminal in case of delivery issues
-        console.log('-----------------------------------------');
-        console.log('📧 EMAIL SENT TO:', options.email);
-        console.log('🔗 SUBJECT:', options.subject);
-        if (options.html) {
-            // Find the first href that actually looks like a URL (not just "#")
-            const links = options.html.match(/href="([^"|#][^"]+)"/g);
-            if (links && links.length > 0) {
-                const activationLink = links[0].match(/"([^"]+)"/)[1];
-                console.log('📍 ACTION LINK (COPY THIS):');
-                console.log('\x1b[36m%s\x1b[0m', activationLink); // Cyan color
-            }
+        if (error) {
+            console.log('❌ RESEND API ERROR:');
+            console.log('   Error:', JSON.stringify(error, null, 2));
+            throw new Error(error.message || 'Resend API error');
         }
-        console.log('-----------------------------------------');
-
-        // TIMEOUT: Race against a 15-second timer (since it's background, we can wait longer)
-        const sendPromise = transporter.sendMail(mailOptions);
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Connection timeout')), 15000)
-        );
-
-        const info = await Promise.race([sendPromise, timeoutPromise]);
 
         console.log('✅ EMAIL SENT SUCCESSFULLY!');
-        console.log('   Message ID:', info.messageId);
-        return info;
+        console.log('   Email ID:', data.id);
+        return data;
+
     } catch (error) {
-        console.log('❌ SMTP ERROR OCCURRED:');
+        console.log('❌ EMAIL SEND FAILED:');
         console.log('   Error Name:', error.name);
         console.log('   Error Message:', error.message);
-        console.log('   Error Code:', error.code || 'N/A');
-        console.log('   Response Code:', error.responseCode || 'N/A');
-        console.log('   Response:', error.response || 'N/A');
 
-        // Common Gmail errors
-        if (error.code === 'EAUTH') {
-            console.log('   🔑 AUTHENTICATION FAILED - Check SMTP_USER and SMTP_PASS');
-            console.log('   💡 Make sure you are using a Gmail App Password, not your regular password');
-        } else if (error.code === 'ESOCKET' || error.code === 'ECONNECTION') {
-            console.log('   🌐 CONNECTION FAILED - Network or firewall issue');
-        } else if (error.message === 'Connection timeout') {
-            console.log('   ⏱️ TIMEOUT - Gmail took too long to respond');
-        }
-
-        throw new Error('Email delivery failed: ' + error.message);
+        // Don't throw - let registration continue, the link is logged to console
+        return { id: 'error-fallback', message: error.message };
     }
 };
 
