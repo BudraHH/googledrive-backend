@@ -41,6 +41,8 @@ app.use(cors({
         process.env.FRONTEND_URL
     ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
 app.get('/health-check', (req, res) => {
