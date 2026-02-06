@@ -6,10 +6,11 @@ const generateToken = (res, userId) => {
     });
 
     // Set JWT as an HTTP-Only Cookie (Industry Standard for security against XSS)
+    // NOTE: sameSite='none' is required for cross-origin cookies (Vercel frontend + Render backend)
     res.cookie('jwt', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV !== 'development', // Use secure cookies in production
-        sameSite: 'strict', // Prevent CSRF attacks
+        secure: process.env.NODE_ENV === 'production', // Must be true for sameSite='none'
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-origin in production
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
 };
