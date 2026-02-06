@@ -36,9 +36,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     await user.save();
 
     // Create activation URL
-    // Create activation URL (Handle trailing slash safely)
-    const frontend = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:5173';
-    const activationUrl = `${frontend}/verify-email?token=${activationToken}`;
+    const activationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${activationToken}`;
 
     const message = `Welcome to CloudDrive! \n\n Please activate your account by clicking the link below: \n\n ${activationUrl}`;
 
@@ -80,27 +78,17 @@ export const registerUser = asyncHandler(async (req, res) => {
     </html>
     `;
 
-    try {
-        await sendEmail({
-            email: user.email,
-            subject: 'Activate Your CloudDrive Account',
-            message,
-            html
-        });
+    // Fire-and-Forget: Send email in background without blocking response
+    sendEmail({
+        email: user.email,
+        subject: 'Activate Your CloudDrive Account',
+        message,
+        html
+    }).catch(error => console.log('Background Email Error:', error.message));
 
-        res.status(201).json({
-            message: 'Registration successful. Please check your email to activate your account.'
-        });
-    } catch (error) {
-        if (error.message !== 'Email delivery skipped (Offline Mode)') {
-            console.error('Email sending failed:', error.message);
-        }
-
-        // We do NOT clear tokens here anymore, so the link in the console remains valid
-        res.status(201).json({
-            message: `Registration successful. [Note: Email service is offline. Use this link to verify: ${activationUrl}]`
-        });
-    }
+    res.status(201).json({
+        message: 'Registration successful. Please check your email to activate your account.'
+    });
 
 });
 
