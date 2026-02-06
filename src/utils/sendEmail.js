@@ -4,6 +4,17 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const sendEmail = async (options) => {
+    // Validate SMTP credentials are configured
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('❌ SMTP CREDENTIALS MISSING!');
+        console.log('   SMTP_USER:', process.env.SMTP_USER ? '✅ Set' : '❌ NOT SET');
+        console.log('   SMTP_PASS:', process.env.SMTP_PASS ? '✅ Set (hidden)' : '❌ NOT SET');
+        throw new Error('Email service not configured - SMTP credentials missing');
+    }
+
+    console.log('📤 Attempting to send email via Gmail SMTP...');
+    console.log('   Using SMTP_USER:', process.env.SMTP_USER);
+
     // 1. Create a transporter for Gmail SMTP
     const transporter = nodemailer.createTransport({
         service: 'gmail',
@@ -49,22 +60,28 @@ const sendEmail = async (options) => {
 
         const info = await Promise.race([sendPromise, timeoutPromise]);
 
+        console.log('✅ EMAIL SENT SUCCESSFULLY!');
+        console.log('   Message ID:', info.messageId);
         return info;
     } catch (error) {
-        // HACKATHON MODE: Don't show scary stack traces for known "account not active" errors
-        if (error.response && error.response.includes('502 5.7.0')) {
-            console.log('⚠️  SMTP NOTICE: Brevo account is pending activation.');
-            console.log('✅  FALLBACK: Simulating email send for smooth testing.');
-        } else {
-            console.log('⚠️  SMTP CONNECTION FAILED (Running in Offline/Hackathon Mode)');
-            console.log('   Error:', error.message);
+        console.log('❌ SMTP ERROR OCCURRED:');
+        console.log('   Error Name:', error.name);
+        console.log('   Error Message:', error.message);
+        console.log('   Error Code:', error.code || 'N/A');
+        console.log('   Response Code:', error.responseCode || 'N/A');
+        console.log('   Response:', error.response || 'N/A');
+
+        // Common Gmail errors
+        if (error.code === 'EAUTH') {
+            console.log('   🔑 AUTHENTICATION FAILED - Check SMTP_USER and SMTP_PASS');
+            console.log('   💡 Make sure you are using a Gmail App Password, not your regular password');
+        } else if (error.code === 'ESOCKET' || error.code === 'ECONNECTION') {
+            console.log('   🌐 CONNECTION FAILED - Network or firewall issue');
+        } else if (error.message === 'Connection timeout') {
+            console.log('   ⏱️ TIMEOUT - Gmail took too long to respond');
         }
 
-        // We do NOT want to throw here anymore if we want the backend to treat it as "sent via fallback"
-        // But the controller anticipates a throw to add the [Note: ...] to the response.
-        // Let's keep throwing but make it a specific error the controller can recognize? 
-        // Or just let it throw a simple message.
-        throw new Error('Email delivery skipped (Offline Mode)');
+        throw new Error('Email delivery failed: ' + error.message);
     }
 };
 
