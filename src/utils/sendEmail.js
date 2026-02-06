@@ -41,7 +41,13 @@ const sendEmail = async (options) => {
         }
         console.log('-----------------------------------------');
 
-        const info = await transporter.sendMail(mailOptions);
+        // TIMEOUT: Race against a 15-second timer (since it's background, we can wait longer)
+        const sendPromise = transporter.sendMail(mailOptions);
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection timeout')), 15000)
+        );
+
+        const info = await Promise.race([sendPromise, timeoutPromise]);
 
         return info;
     } catch (error) {
