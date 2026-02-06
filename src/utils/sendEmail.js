@@ -1,4 +1,3 @@
-import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -19,35 +18,47 @@ const sendEmail = async (options) => {
     }
     console.log('-----------------------------------------');
 
-    // Check if Resend API key is configured
-    if (!process.env.RESEND_API_KEY) {
-        console.log('⚠️  RESEND_API_KEY not configured - running in offline mode');
-        console.log('📋 To enable emails, add RESEND_API_KEY to your environment variables');
-        console.log('🔗 Get your free API key at: https://resend.com');
+    // Check if Brevo API key is configured
+    if (!process.env.BREVO_API_KEY) {
+        console.log('⚠️  BREVO_API_KEY not configured - running in offline mode');
+        console.log('📋 To enable emails, add BREVO_API_KEY to your environment variables');
+        console.log('🔗 Get your free API key at: https://app.brevo.com/settings/keys/api');
         // Don't throw error - allow registration to continue, link is logged above
-        return { id: 'offline-mode', message: 'Email skipped - API key not configured' };
+        return { messageId: 'offline-mode', message: 'Email skipped - API key not configured' };
     }
 
-    console.log('📤 Sending email via Resend API...');
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    console.log('📤 Sending email via Brevo API...');
 
     try {
-        const { data, error } = await resend.emails.send({
-            from: process.env.FROM_EMAIL || 'CloudDrive <onboarding@resend.dev>',
-            to: options.email,
-            subject: options.subject,
-            html: options.html || `<p>${options.message}</p>`,
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                sender: {
+                    name: 'CloudDrive',
+                    email: process.env.FROM_EMAIL || 'noreply@clouddrive.com'
+                },
+                to: [{ email: options.email }],
+                subject: options.subject,
+                htmlContent: options.html || `<p>${options.message}</p>`,
+            }),
         });
 
-        if (error) {
-            console.log('❌ RESEND API ERROR:');
-            console.log('   Error:', JSON.stringify(error, null, 2));
-            throw new Error(error.message || 'Resend API error');
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.log('❌ BREVO API ERROR:');
+            console.log('   Status:', response.status);
+            console.log('   Response:', JSON.stringify(data, null, 2));
+            throw new Error(data.message || 'Brevo API error');
         }
 
         console.log('✅ EMAIL SENT SUCCESSFULLY!');
-        console.log('   Email ID:', data.id);
+        console.log('   Message ID:', data.messageId);
         return data;
 
     } catch (error) {
@@ -56,7 +67,7 @@ const sendEmail = async (options) => {
         console.log('   Error Message:', error.message);
 
         // Don't throw - let registration continue, the link is logged to console
-        return { id: 'error-fallback', message: error.message };
+        return { messageId: 'error-fallback', message: error.message };
     }
 };
 
